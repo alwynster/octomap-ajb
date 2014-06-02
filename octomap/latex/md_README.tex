@@ -1,0 +1,115 @@
+Authors\+: Kai M. Wurm and Armin Hornung, University of Freiburg, Copyright (C) 2009-\/2013. \href{http://octomap.github.com}{\tt http\+://octomap.\+github.\+com}
+
+See the \href{AUTHORS.txt}{\tt list of contributors} for further authors.
+
+License for octomap\+: \href{LICENSE.txt}{\tt New B\+S\+D License}
+
+\subsection*{R\+E\+Q\+U\+I\+R\+E\+M\+E\+N\+T\+S }
+
+
+\begin{DoxyItemize}
+\item For only the octomap library\+: cmake and a regular build environment (gcc)
+\item For H\+T\+M\+L documentation\+: doxygen (optional)
+\item For the viewer octovis\+: Qt4, Open\+G\+L, Q\+G\+L\+Viewer (optional)
+\end{DoxyItemize}
+
+Skip to W\+I\+N\+D\+O\+W\+S for tips on compilation under Windows. You can install all dependencies on Ubuntu by running\+: \begin{DoxyVerb}sudo apt-get install cmake doxygen libqt4-dev libqt4-opengl-dev libqglviewer-qt4-dev
+\end{DoxyVerb}
+
+
+\subsection*{I\+N\+S\+T\+A\+L\+L\+A\+T\+I\+O\+N }
+
+See \href{http://www.ros.org/wiki/octomap}{\tt http\+://www.\+ros.\+org/wiki/octomap} if you want to use Octo\+Map in R\+O\+S! There are pre-\/compiled packages for octomap, octovis, and R\+O\+S integration available.
+
+Build the complete project by changing into the \char`\"{}build\char`\"{} directory and running cmake\+: \begin{DoxyVerb}mkdir build && cd build 
+cmake ..
+\end{DoxyVerb}
+
+
+Type {\ttfamily make} to compile afterwards. This will create all C\+Make files cleanly in the {\ttfamily build} folder (Out-\/of-\/source build). Executables will end up in {\ttfamily bin}, libraries in {\ttfamily lib}.
+
+A debug configuration can be created by running\+: \begin{DoxyVerb}cmake -DCMAKE_BUILD_TYPE=Debug ..
+\end{DoxyVerb}
+
+
+in {\ttfamily build} or a different directory (e.\+g. {\ttfamily build-\/debug}).
+
+You can install the library by running {\ttfamily make install}, though it is usually not necessary. Be sure to adjust {\ttfamily C\+M\+A\+K\+E\+\_\+\+I\+N\+S\+T\+A\+L\+L\+\_\+\+P\+R\+E\+F\+I\+X} before.
+
+The target {\ttfamily make test} executes the unit tests for the octomap library, if you are interested in verifying the functionality on your machine.
+
+\subsection*{D\+O\+C\+U\+M\+E\+N\+T\+A\+T\+I\+O\+N }
+
+The documentation for the latest stable release is available online\+: \href{http://octomap.github.com/octomap/doc/index.html}{\tt http\+://octomap.\+github.\+com/octomap/doc/index.\+html}
+
+You can build the most current H\+T\+M\+L-\/\+Documentation for your current source with Doxygen by running {\ttfamily make docs} in the build directory. The documentation will end up in {\ttfamily doc/html/index.\+html} in the main directory.
+
+\subsection*{G\+E\+T\+T\+I\+N\+G S\+T\+A\+R\+T\+E\+D }
+
+Jump right in and have a look at the example src/octomap/simple\+\_\+example.\+cpp
+
+Or start the 3\+D viewer with {\ttfamily bin/octovis}
+
+You will find an example scan and binary tree to load in the directory {\ttfamily share}. Further examples can be downloaded from the project website.
+
+\subsection*{U\+S\+E I\+N O\+T\+H\+E\+R P\+R\+O\+J\+E\+C\+T\+S }
+
+A C\+Make-\/project config is generated for Octo\+Map which allows Octo\+Map to be used from other C\+Make-\/\+Projects easily.
+
+Point C\+Make to your octomap installation so that it finds the file octomap/lib/cmake/octomap/octomap-\/config.\+cmake, e.\+g. by setting the environment variable {\ttfamily octomap\+\_\+\+D\+I\+R}to the directory containing it.
+
+Then add the following to your C\+Make\+Lists.\+txt\+: \begin{DoxyVerb}find_package(octomap REQUIRED)
+include_directories(${OCTOMAP_INCLUDE_DIRS})
+link_libraries(${OCTOMAP_LIBRARIES})
+\end{DoxyVerb}
+
+
+In addition to this cmake-\/module we also provide a pkgconfig-\/file.
+
+For convenience, there is a minimal example project included in the file share/example-\/project.\+tgz
+
+\subsection*{E\+C\+L\+I\+P\+S\+E P\+R\+O\+J\+E\+C\+T F\+I\+L\+E\+S }
+
+Eclipse project files can be generated (with some limitations, see\+: \href{http://www.vtk.org/Wiki/Eclipse_CDT4_Generator}{\tt http\+://www.\+vtk.\+org/\+Wiki/\+Eclipse\+\_\+\+C\+D\+T4\+\_\+\+Generator}) by running\+: \begin{DoxyVerb}cmake -G"Eclipse CDT4 - Unix Makefiles" ..
+\end{DoxyVerb}
+
+
+Import the project (existing project, root is the build folder, do not copy contents) into Eclipse afterwards. For full Eclipse compatibility, it might be necessary to build in the main source directory.
+
+\subsection*{W\+I\+N\+D\+O\+W\+S }
+
+The octomap library and tools can be compiled and used under Windows although this has not been tested in-\/depth. Feedback is welcome.
+
+To compile the library you need cmake (\href{http://www.cmake.org}{\tt http\+://www.\+cmake.\+org}).
+
+\subsubsection*{Min\+G\+W}
+
+
+\begin{DoxyEnumerate}
+\item Download the Min\+G\+W distribution (\href{http://www.mingw.org}{\tt http\+://www.\+mingw.\+org})
+\item Install C++ compiler and add Ming\+G\+W/bin to your system P\+A\+T\+H
+\item Start the cmake-\/gui and set the code directory to the library root (e.\+g. {\ttfamily /octomap})
+\item Set the build directory to, e.\+g., {\ttfamily /octomap/build}.
+\item Press \char`\"{}\+Generate\char`\"{}, select the appropriate generator, \char`\"{}\+Min\+G\+W Makefiles\char`\"{}.
+\item Start a command shell and \char`\"{}make\char`\"{} the project\+: \begin{DoxyVerb} octomap> cd build
+ octomap/build> mingw32-make.exe
+\end{DoxyVerb}
+
+\end{DoxyEnumerate}
+
+You can run the unit tests using ctest on the command prompt\+: \begin{DoxyVerb}octomap/build> ctest.exe
+\end{DoxyVerb}
+
+
+\subsubsection*{Microsoft Visual Studio 2010}
+
+
+\begin{DoxyEnumerate}
+\item Start the cmake-\/gui and set the code directory to the library root (e.\+g. {\ttfamily /octomap})
+\item Set the build directory to, e.\+g., /octomap/build.
+\item Press \char`\"{}\+Generate\char`\"{}, select the appropriate generator, e.\+g. \char`\"{}\+Visual Studio 10\char`\"{}. This generates a solution file octomap.\+sln
+\item Load this file and build the project
+\end{DoxyEnumerate}
+
+You can run the unit tests using ctest on the command prompt\+: \begin{DoxyVerb}octomap/build> ctest.exe -C Release\end{DoxyVerb}
+ 

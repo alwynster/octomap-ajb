@@ -66,8 +66,8 @@ void ViewerWidget::init() {
   // Directional light
   glLightfv(GL_LIGHT0, GL_POSITION, pos);
 
-  // background color defaults to white
-  this->setBackgroundColor( QColor(255,255,255) );
+  // background color defaults to black
+  this->setBackgroundColor( QColor(0,0,0) );
   this->qglClearColor( this->backgroundColor() );
 }
 

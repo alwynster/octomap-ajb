@@ -24,9 +24,10 @@
  */
 
 #include <octovis/ViewerSettingsPanel.h>
+#include <octomap/SensorModel.h>
 
 ViewerSettingsPanel::ViewerSettingsPanel(QWidget *parent)
-    : QWidget(parent), m_currentScan(0), m_numberScans(0), m_treeDepth(_TREE_MAX_DEPTH), m_resolution(0.1)
+    : QWidget(parent), m_currentScan(0), m_numberScans(0), m_treeDepth(_TREE_MAX_DEPTH), m_resolution(BLOCK_SIZE)
 {
 	ui.setupUi(this);
 	connect(ui.treeDepth, SIGNAL(valueChanged(int)), this, SLOT(setTreeDepth(int)));

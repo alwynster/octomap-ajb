@@ -30,6 +30,7 @@
 #include <octovis/ViewerGui.h>
 #include <octovis/ColorOcTreeDrawer.h>
 #include <octomap/MapCollection.h>
+#include <octomap/SensorModel.h>
 
 
 #define _MAXRANGE_URG 5.1
@@ -41,7 +42,7 @@ ViewerGui::ViewerGui(const std::string& filename, QWidget *parent)
 : QMainWindow(parent), m_scanGraph(NULL),
   m_trajectoryDrawer(NULL), m_pointcloudDrawer(NULL),
   m_cameraFollowMode(NULL),
-  m_octreeResolution(0.1), m_laserMaxRange(-1.), m_occupancyThresh(0.5),
+  m_octreeResolution(BLOCK_SIZE), m_laserMaxRange(-1.), m_occupancyThresh(0.5),
   m_max_tree_depth(16), m_laserType(LASERTYPE_SICK),
   m_cameraStored(false), m_filename("") {
 
@@ -345,13 +346,17 @@ void ViewerGui::gotoFirstScan(){
 
     // if (m_ocTree) delete m_ocTree;
     // m_ocTree = new octomap::OcTree(m_octreeResolution);
+    cout << "\nResolution: " << m_octreeResolution;
     OcTree* tree = new octomap::OcTree(m_octreeResolution);
     this->addOctree(tree, DEFAULT_OCTREE_ID);
 
     addNextScan();
 
+    cout << "\nrestoring override cursor";
     QApplication::restoreOverrideCursor();
+    cout << "\nshowing";
     showOcTree();
+    cout << "\ndone";
   }
 }
 
@@ -374,7 +379,6 @@ void ViewerGui::addNextScan(){
 
     QApplication::restoreOverrideCursor();
     showOcTree();
-
   }
 }
 
@@ -425,7 +429,7 @@ void ViewerGui::openGraph(bool completeGraph){
   m_scanGraph = new octomap::ScanGraph();
   m_scanGraph->readBinary(m_filename);
 
-  loadGraph(completeGraph);
+  loadGraph(false);
 }
 
 
@@ -547,13 +551,13 @@ void ViewerGui::loadGraph(bool completeGraph) {
 
   ui.actionSettings->setEnabled(true);
   ui.actionPointcloud->setEnabled(true);
-  ui.actionPointcloud->setChecked(false);
+  ui.actionPointcloud->setChecked(true);
   ui.actionTrajectory->setEnabled(true);
   ui.actionOctree_cells->setEnabled(true);
   ui.actionOctree_cells->setChecked(true);
   ui.actionOctree_structure->setEnabled(true);
   ui.actionOctree_structure->setChecked(false);
-  ui.actionFree->setChecked(false);
+  ui.actionFree->setChecked(true);
   ui.actionFree->setEnabled(true);
   ui.actionReload_Octree->setEnabled(true);
   ui.actionConvert_ml_tree->setEnabled(true);
@@ -572,6 +576,9 @@ void ViewerGui::loadGraph(bool completeGraph) {
 
     //if (m_ocTree) delete m_ocTree;
     //m_ocTree = new octomap::OcTree(m_octreeResolution);
+
+    cout << "\nResolution: " << m_octreeResolution;
+
     OcTree* tree = new octomap::OcTree(m_octreeResolution);
     this->addOctree(tree, DEFAULT_OCTREE_ID);
 
@@ -604,6 +611,8 @@ void ViewerGui::loadGraph(bool completeGraph) {
 
   if (ui.actionPointcloud->isChecked())
     m_glwidget->addSceneObject(m_pointcloudDrawer);
+
+  on_actionFree_toggled(true);
 }
 
 void ViewerGui::changeTreeDepth(int depth){
@@ -631,7 +640,7 @@ void ViewerGui::on_actionSettings_triggered(){
   ViewerSettings dialog(this);
   dialog.setResolution(m_octreeResolution);
   dialog.setLaserType(m_laserType);
-  dialog.setMaxRange(m_laserMaxRange);
+    dialog.setMaxRange (m_laserMaxRange);
 
 
   if (dialog.exec()){

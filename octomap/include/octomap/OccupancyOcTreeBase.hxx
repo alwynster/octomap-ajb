@@ -31,9 +31,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "SensorModel.h"
 #include <bitset>
+#include <stdlib.h>
+// #include <cmath>
 
 #include <octomap/MCTables.h>
+
+using namespace std;
 
 namespace octomap {
 
@@ -67,8 +72,6 @@ namespace octomap {
     this->prob_hit_log = rhs.prob_hit_log;
     this->prob_miss_log = rhs.prob_miss_log;
     this->occ_prob_thres_log = rhs.occ_prob_thres_log;
-
-
   }
 
   template <class NODE>
@@ -77,6 +80,7 @@ namespace octomap {
     Pointcloud& cloud = *(scan.scan);
     pose6d frame_origin = scan.pose;
     point3d sensor_origin = frame_origin.inv().transform(scan.pose.trans());
+    cout << "inserting point cloud rays!\n";
     insertPointCloud(cloud, sensor_origin, frame_origin, maxrange, lazy_eval, discretize);
   }
 
@@ -102,19 +106,29 @@ namespace octomap {
 
   template <class NODE>
   void OccupancyOcTreeBase<NODE>::insertPointCloud(const Pointcloud& pc, const point3d& sensor_origin, const pose6d& frame_origin,
-                                             double maxrange, bool lazy_eval, bool discretize) {
+                                             double maxrange, bool lazy_eval, bool discretize, int sensor_model, float sigma, float mu) {
     // performs transformation to data and sensor origin first
     Pointcloud transformed_scan (pc);
     transformed_scan.transform(frame_origin);
     point3d transformed_sensor_origin = frame_origin.transform(sensor_origin);
-    insertPointCloud(transformed_scan, transformed_sensor_origin, maxrange, lazy_eval, discretize);
+    if (sensor_model == IDEAL_MODEL)
+        insertPointCloud(transformed_scan, transformed_sensor_origin, maxrange, lazy_eval, discretize);
+    else
+        insertPointCloudRays(transformed_scan, transformed_sensor_origin, maxrange, lazy_eval, sensor_model, sigma, mu);
   }
 
 
   template <class NODE>
-  void OccupancyOcTreeBase<NODE>::insertPointCloudRays(const Pointcloud& pc, const point3d& origin, double maxrange, bool lazy_eval) {
+  void OccupancyOcTreeBase<NODE>::insertPointCloudRays(const Pointcloud& pc, const point3d& origin, int sensor_model, float sigma, float mu, double maxrange, bool lazy_eval) {
     if (pc.size() < 1)
       return;
+
+    point3d new_p;
+    point3d dir;
+    point3d start;
+    float Z, new_Z;
+    int perc = -1;
+    int progress = 0;
 
 #ifdef _OPENMP
     omp_set_num_threads(this->keyrays.size());
@@ -122,21 +136,60 @@ namespace octomap {
 #endif
     for (int i = 0; i < (int)pc.size(); ++i) {
       const point3d& p = pc[i];
+
+      progress = ceil(i / ((float)pc.size()) * 100.0);
+      if (perc != progress) {
+        perc = progress;
+        cout << "\n" << perc << "%";
+      }
+
+      // range of measurement taken
+      dir = p - origin;
+      Z = dir.norm();
+      dir /= Z;
+      new_Z = (1.0f + (float)DIST_ADD) * Z;
+
+      // cap maximum possible range of measurement
+      if (sensor_model == PRISM)
+      {
+        if (new_Z > maxrange)
+          new_p = origin + dir * (MAX_RANGE - BLOCK_SIZE);
+        else
+          new_p = origin + dir * new_Z;
+
+        start = origin + dir * (MIN_RANGE + BLOCK_SIZE * 2);
+      }
+      else
+      {
+        start = origin;
+
+        if (maxrange != -1)
+        {
+          if (new_Z > maxrange)
+            new_p = origin + dir * maxrange;
+          else
+            new_p = origin + dir * new_Z;
+        }
+        else
+          new_p = origin + dir * (1.0f + (float)DIST_ADD) * Z;
+      }
+
       unsigned threadIdx = 0;
 #ifdef _OPENMP
       threadIdx = omp_get_thread_num();
 #endif
       KeyRay* keyray = &(this->keyrays.at(threadIdx));
 
-      if (this->computeRayKeys(origin, p, *keyray)){
+      if (this->computeRayKeys(start, new_p, *keyray)){
 #ifdef _OPENMP
         #pragma omp critical
 #endif
         {
           for(KeyRay::iterator it=keyray->begin(); it != keyray->end(); it++) {
-            updateNode(*it, false, lazy_eval); // insert freespace measurement
+            updateNode(*it, false, lazy_eval, origin, p, Z, sensor_model, sigma, mu); // insert freespace measurement
           }
-          updateNode(p, true, lazy_eval); // update endpoint to be occupied
+          if (sensor_model == IDEAL_MODEL)
+            updateNode(p, true, lazy_eval); // update endpoint to be occupied
         }
       }
 
@@ -301,6 +354,7 @@ namespace octomap {
     // early abort (no change will happen).
     // may cause an overhead in some configuration, but more often helps
     NODE* leaf = this->search(key);
+
     // no change: node already at threshold
     if (leaf
         && ((log_odds_update >= 0 && leaf->getLogOdds() >= this->clamping_thres_max)
@@ -334,20 +388,99 @@ namespace octomap {
     if (!this->coordToKeyChecked(x, y, z, key))
       return NULL;
 
+
     return updateNode(key, log_odds_update, lazy_eval);
   }
 
-  template <class NODE>
-  NODE* OccupancyOcTreeBase<NODE>::updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval) {
-    float logOdds = this->prob_miss_log;
-    if (occupied)
-      logOdds = this->prob_hit_log;
+    template <class NODE>
+  NODE* OccupancyOcTreeBase<NODE>::updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval, point3d origin, point3d end, float Z, int sensor_model, float sigma, float mu) {
+    float logOdds;
+    float sqrt2, ism;
+
+    float r_l, r_h;
+    float I_lh, I_minl, I_hmax;
+    float arg;
+    float OR;
+
+    point3d dest = this->keyToCoord(key);
+    point3d dir = dest - origin;
+    float r = dir.norm();
+    dir.normalize();
+
+    point3d center, entrance, exit;
+    const float eps = 1e-5f;
+
+
+    if (DIST_SIGMA && sensor_model == ISM)
+      sigma = pow(Z, 2.0) / (KITTI_F * KITTI_B);
+
+    switch (sensor_model) {
+      case IDEAL_MODEL:
+        logOdds = this->prob_miss_log;
+        if (occupied)
+          logOdds = this->prob_hit_log;
+        break;
+      case ISM:
+        sqrt2 = (float) sqrt(2.0);
+        ism = -0.25f * erf((r - Z - L / 2) / (sqrt2 * sigma))
+          + 0.25f + 0.5f * erf((r - Z + L / 2) / (sqrt2 * sigma));
+        logOdds = log(ism / (1.0f - ism));
+        break;
+      case PRISM:
+        if (CORRECT_ABC) {
+          this->getRayIntersection(origin, dir, dest, entrance, eps);
+          this->getRayIntersection(dest, -dir, dest, exit, eps);
+//          cout << "\nentrance " << entrance << "\texit " <<  exit << "\tcenter " << dest;
+
+          r_l = (entrance - origin).norm(), r_h = (exit - origin).norm();
+
+//          cout << "\nr_l " << r_l << "\tr " << r << "\tr_h " <<  r_h;
+//
+//          char c;
+//          cin >> c;
+
+          // check intersections for entrance and exit
+
+          // sects = this->findIntersects(origin, dest);
+  //        this->RayIntersects();
+        }
+        else {
+          r_l = r - BLOCK_SIZE / 2.0f;
+          r_h = r + BLOCK_SIZE / 2.0f;
+        }
+
+
+        I_lh = Integral(r_l, r_h, Z, sigma, mu);
+        if (I_lh == -1)
+          cout << "\nerror 1: " << r_l << " " << r_h;
+        I_minl = Integral(MIN_RANGE, r_l, Z, sigma, mu);
+        if (I_minl == -1)
+          cout << "\nerror 2: " << MIN_RANGE << " " << r_l;
+        I_hmax = Integral(r_h, MAX_RANGE, Z, sigma, mu);
+        if (I_hmax == -1)
+          cout << "\nerror 3: " << r_h << " " << MAX_RANGE;
+
+        OR = logsumexp(I_lh, 1, I_minl, 1 - PRECALC);
+        OR -= logsumexp(I_hmax, 1, I_minl, PRECALC);
+
+        logOdds = OR - logsumexp(OR, 1, LOG1, 1);
+
+        // change to delta log occupancy
+        arg = logOdds - log(1 - exp(logOdds));
+        // convert base e to base 10
+        logOdds = arg;
+
+        break;
+      default:
+        logOdds = 0;
+        break;
+    }
 
     return updateNode(key, logOdds, lazy_eval);
   }
 
   template <class NODE>
-  NODE* OccupancyOcTreeBase<NODE>::updateNode(const point3d& value, bool occupied, bool lazy_eval) {
+  NODE* OccupancyOcTreeBase<NODE>::updateNode(const point3d& value, bool occupied, bool lazy_eval, point3d origin, point3d end, float Z, int sensor_model, float sigma, float mu) {
     OcTreeKey key;
     if (!this->coordToKeyChecked(value, key))
       return NULL;
@@ -355,7 +488,7 @@ namespace octomap {
   }
 
   template <class NODE>
-  NODE* OccupancyOcTreeBase<NODE>::updateNode(double x, double y, double z, bool occupied, bool lazy_eval) {
+  NODE* OccupancyOcTreeBase<NODE>::updateNode(double x, double y, double z, bool occupied, bool lazy_eval, point3d origin, point3d end, float Z) {
     OcTreeKey key;
     if (!this->coordToKeyChecked(x, y, z, key))
       return NULL;
@@ -857,35 +990,35 @@ namespace octomap {
 
 
   template <class NODE> inline bool 
-  OccupancyOcTreeBase<NODE>::integrateMissOnRay(const point3d& origin, const point3d& end, bool lazy_eval) {
+  OccupancyOcTreeBase<NODE>::integrateMissOnRay(const point3d& origin, const point3d& end, bool lazy_eval, float r, float Z) {
 
     if (!this->computeRayKeys(origin, end, this->keyrays.at(0))) {
       return false;
     }
     
     for(KeyRay::iterator it=this->keyrays[0].begin(); it != this->keyrays[0].end(); it++) {
-      updateNode(*it, false, lazy_eval); // insert freespace measurement
+      updateNode(*it, false, lazy_eval, origin, end, Z); // insert freespace measurement
     }
   
     return true;
   }
 
   template <class NODE> bool 
-  OccupancyOcTreeBase<NODE>::insertRay(const point3d& origin, const point3d& end, double maxrange, bool lazy_eval)
+  OccupancyOcTreeBase<NODE>::insertRay(const point3d& origin, const point3d& end, double maxrange, bool lazy_eval, float r, float Z)
   {
     // cut ray at maxrange
     if ((maxrange > 0) && ((end - origin).norm () > maxrange)) 
       {
         point3d direction = (end - origin).normalized ();
         point3d new_end = origin + direction * (float) maxrange;
-        return integrateMissOnRay(origin, new_end,lazy_eval);
+        return integrateMissOnRay(origin, new_end,lazy_eval, r, Z);
       }
     // insert complete ray
     else 
       {
-        if (!integrateMissOnRay(origin, end,lazy_eval))
+        if (!integrateMissOnRay(origin, end,lazy_eval, r, Z))
           return false;
-        updateNode(end, true, lazy_eval); // insert hit cell
+        updateNode(end, true, lazy_eval, origin, end, Z); // insert hit cell
         return true;
       }
   }
@@ -1122,16 +1255,20 @@ namespace octomap {
   void OccupancyOcTreeBase<NODE>::nodeToMaxLikelihood(NODE* occupancyNode) const{
     if (this->isNodeOccupied(occupancyNode))
       occupancyNode->setLogOdds(this->clamping_thres_max);
-    else
+    else if (this->isNodeEmpty(occupancyNode))
       occupancyNode->setLogOdds(this->clamping_thres_min);
+    else
+      occupancyNode->setLogOdds(0.0);
   }
 
   template <class NODE>
   void OccupancyOcTreeBase<NODE>::nodeToMaxLikelihood(NODE& occupancyNode) const{
     if (this->isNodeOccupied(occupancyNode))
       occupancyNode.setLogOdds(this->clamping_thres_max);
-    else
+    else if (this->isNodeEmpty(occupancyNode))
       occupancyNode.setLogOdds(this->clamping_thres_min);
+    else
+      occupancyNode.setLogOdds(0.0);
   }
 
 } // namespace

@@ -1,0 +1,15 @@
+-I/home/alwynster/git/octomap/octomap/include
+-I/home/alwynster/git/octomap/octovis/include
+-I/usr/include/qt4
+-I/usr/include/qt4/QtOpenGL
+-I/usr/include/qt4/QtGui
+-I/usr/include/qt4/QtXml
+-I/usr/include/qt4/QtCore
+-I/home/alwynster/git/octomap/octovis/src/extern/QGLViewer
+-DQT_OPENGL_LIB
+-DQT_GUI_LIB
+-DQT_XML_LIB
+-DQT_CORE_LIB
+-o
+/home/alwynster/git/octomap/octomap/octovis/include/octovis/moc_CameraFollowMode.cxx
+/home/alwynster/git/octomap/octovis/include/octovis/CameraFollowMode.h

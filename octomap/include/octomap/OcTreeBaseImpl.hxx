@@ -41,6 +41,12 @@
 
 namespace octomap {
 
+  template <class NODE,class I>
+  point3d* OcTreeBaseImpl<NODE,I>::findIntersects(const point3d& origin, const point3d& dest) {
+
+    return NULL;
+  }
+
 
   template <class NODE,class I>
   OcTreeBaseImpl<NODE,I>::OcTreeBaseImpl(double resolution) :
