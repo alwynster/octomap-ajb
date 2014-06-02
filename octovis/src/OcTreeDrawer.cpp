@@ -119,7 +119,7 @@ namespace octomap {
     this->origin = origin;
     
     // maximum size to prevent crashes on large maps: (should be checked in a better way than a constant)
-    bool showAll = (octree.size() < 5 * 1e6);
+    bool showAll = true; // (octree.size() < 5 * 1e6);
     bool uses_origin = ( (origin.rot().x() != 0.) && (origin.rot().y() != 0.)
         && (origin.rot().z() != 0.) && (origin.rot().u() != 1.) );
 
@@ -134,7 +134,7 @@ namespace octomap {
           if (octree.isNodeAtThreshold(*it)) ++cnt_occupied_thres;
           else                               ++cnt_occupied;
         }
-        else if (showAll) { // freespace voxels
+        else if (octree.isNodeEmpty(*it)) { // freespace voxels
           if (octree.isNodeAtThreshold(*it)) ++cnt_free_thres;
           else                               ++cnt_free;
         }
@@ -181,7 +181,7 @@ namespace octomap {
             color_idx_occupied = setCubeColorHeightmap(voxel, color_idx_occupied, &m_occupiedColorArray);
           }
         }
-        else if (showAll) { // freespace voxels
+        else if (octree.isNodeEmpty(*it)) { // freespace voxels
           if (octree.isNodeAtThreshold(*it)) {
             idx_free_thres = generateCube(voxel, cube_template, idx_free_thres, &m_freeThresArray);
           }

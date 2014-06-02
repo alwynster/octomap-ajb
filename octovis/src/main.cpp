@@ -30,8 +30,13 @@
 int main(int argc, char *argv[]) {
 
   std::string filename = "";
+  int sensor_model = 0;
   if (argc == 2) {
     filename = std::string(argv[1]);
+  }
+  else if (argc == 3) {
+    filename = std::string(argv[1]);
+    sensor_model = atof(argv[2]);
   }
 
   QApplication app(argc, argv);

@@ -34,16 +34,21 @@
 #ifndef OCTOMAP_OCCUPANCY_OCTREE_BASE_H
 #define OCTOMAP_OCCUPANCY_OCTREE_BASE_H
 
-
 #include <list>
 #include <stdlib.h>
 #include <vector>
+
+#include <bitset>
+#include <cfloat>
 
 #include "octomap_types.h"
 #include "octomap_utils.h"
 #include "OcTreeBaseImpl.h"
 #include "AbstractOccupancyOcTree.h"
 
+#include "SensorModel.h"
+
+using namespace std;
 
 namespace octomap {
 
@@ -115,7 +120,7 @@ namespace octomap {
     *   This reduces the number of raycasts using computeDiscreteUpdate(), resulting in a potential speedup.*
     */
     virtual void insertPointCloud(const Pointcloud& scan, const point3d& sensor_origin, const pose6d& frame_origin,
-                   double maxrange=-1., bool lazy_eval = false, bool discretize = false);
+                   double maxrange=-1., bool lazy_eval = false, bool discretize = false, int sensor_model = 0, float sigma = 1.0f, float mu = 0);
 
     /**
     * Insert a 3d scan (given as a ScanNode) into the tree, parallelized with OpenMP.
@@ -167,7 +172,7 @@ namespace octomap {
      * @param lazy_eval whether update of inner nodes is omitted after the update (default: false).
      *   This speeds up the insertion, but you need to call updateInnerOccupancy() when done.
      */
-     virtual void insertPointCloudRays(const Pointcloud& scan, const point3d& sensor_origin, double maxrange = -1., bool lazy_eval = false);
+     virtual void insertPointCloudRays(const Pointcloud& scan, const point3d& sensor_origin, int sensor_model = 0, float sigma = 1.0f, float mu = 0, double maxrange = -1., bool lazy_eval = false);
 
      /**
       * Set log_odds value of voxel to log_odds_value. This only works if key is at the lowest
@@ -245,16 +250,19 @@ namespace octomap {
       */
      virtual NODE* updateNode(double x, double y, double z, float log_odds_update, bool lazy_eval = false);
 
+
     /**
      * Integrate occupancy measurement.
      *
      * @param key OcTreeKey of the NODE that is to be updated
      * @param occupied true if the node was measured occupied, else false
-     * @param lazy_eval whether update of inner nodes is omitted after the update (default: false).
+     * @param lazy_eval whether update of inner nodes is omitted after the update (default: false)
+     * @param r range of current node (default: 0).
+     * @param Z range of measurement (default: 0).
      *   This speeds up the insertion, but you need to call updateInnerOccupancy() when done.
      * @return pointer to the updated NODE
      */
-    virtual NODE* updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval = false);
+    virtual NODE* updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval = false, point3d origin = point3d(), point3d end = point3d(), float Z = 0, int sensor_model = 0, float sigma = 1.0f, float mu = 0);
 
     /**
      * Integrate occupancy measurement.
@@ -263,10 +271,12 @@ namespace octomap {
      * @param value 3d coordinate of the NODE that is to be updated
      * @param occupied true if the node was measured occupied, else false
      * @param lazy_eval whether update of inner nodes is omitted after the update (default: false).
+     * @param origin source of measurement
+     * @param Z range of measurement (default: 0).
      *   This speeds up the insertion, but you need to call updateInnerOccupancy() when done.
      * @return pointer to the updated NODE
      */
-    virtual NODE* updateNode(const point3d& value, bool occupied, bool lazy_eval = false);
+    virtual NODE* updateNode(const point3d& value, bool occupied, bool lazy_eval = false, point3d origin = point3d(), point3d end = point3d(), float Z = 0, int sensor_model = 0, float sigma = 1.0f, float mu = 0);
 
     /**
      * Integrate occupancy measurement.
@@ -277,10 +287,12 @@ namespace octomap {
      * @param z
      * @param occupied true if the node was measured occupied, else false
      * @param lazy_eval whether update of inner nodes is omitted after the update (default: false).
+     * @param origin source of measurement
+     * @param Z range of measurement (default: 0).
      *   This speeds up the insertion, but you need to call updateInnerOccupancy() when done.
      * @return pointer to the updated NODE
      */
-    virtual NODE* updateNode(double x, double y, double z, bool occupied, bool lazy_eval = false);
+    virtual NODE* updateNode(double x, double y, double z, bool occupied, bool lazy_eval = false, point3d origin = point3d(), point3d end = point3d(), float Z = 0);
 
 
     /**
@@ -300,10 +312,12 @@ namespace octomap {
      * @param end endpoint of measurement in global coordinates
      * @param maxrange maximum range after which the raycast should be aborted
      * @param lazy_eval whether update of inner nodes is omitted after the update (default: false).
+     * @param r range of current node (default: 0).
+     * @param Z range of measurement (default: 0).
      *   This speeds up the insertion, but you need to call updateInnerOccupancy() when done.
      * @return success of operation
      */
-    virtual bool insertRay(const point3d& origin, const point3d& end, double maxrange=-1.0, bool lazy_eval = false);
+    virtual bool insertRay(const point3d& origin, const point3d& end, double maxrange=-1.0, bool lazy_eval = false, float r = 0, float Z = 0);
     
     /**
      * Performs raycasting in 3d, similar to computeRay(). Can be called in parallel e.g. with OpenMP
@@ -371,6 +385,102 @@ namespace octomap {
     bool inBBX(const point3d& p) const;
     /// @return true if key is in the currently set bounding box
     bool inBBX(const OcTreeKey& key) const;
+
+    /**
+    * Calculate the log of the sum of two weighted exponential values
+    *
+    * @param A power of first component
+    * @param a weight of first component
+    * @param B power of second component
+    * @param b weight of second component
+    * @return float answer of log sum exp
+    */
+    float logsumexp(float A, float a, float B, float b)
+    {
+      float mx = A;
+      if (B > A)
+        mx = B;
+
+      return log(a * exp(A - mx) + b * exp(B - mx)) + mx;
+    }
+
+    /**
+    * Calculate the log of the sum of a number of weighted exponential values
+    *
+    * @param expn vector with all exponent arguments
+    * @param b constant weight
+    * @return float answer of log sum exp
+    */
+    float logsumexp(std::vector<float> expn, float b)
+    {
+      std::vector<float>::iterator expn_it;
+      float mx = -std::numeric_limits<float>::max();
+      for (expn_it = expn.begin(); expn_it != expn.end(); ++expn_it)
+      {
+        if (mx < *expn_it)
+          mx = *expn_it;
+      }
+
+      float sum = 0.0f;
+      for (expn_it = expn.begin(); expn_it != expn.end(); ++expn_it)
+        sum += exp(*expn_it - mx);
+      sum *= b;
+
+//      cout << "\nlse " << mx << " " << sum << " " << log(sum);
+
+      return log(sum) + mx;
+    }
+
+    /**
+    * Calculate the assisting integral used for PRISM
+    *
+    * @param start lower boundary of integral
+    * @param end higher boundary of integral
+    * @param Z float value of measurement range
+    * @return float answer of integral
+    */
+    float Integral(float start, float end, float Z, float sigma, float mu) {
+//      // invert integral if needs
+//      float sign = 1;
+//      if (end < start){
+//        sign = -1;
+//        float extra = start;
+//        start = end;
+//        end = extra;
+//      }
+
+      // linspace x
+      float dx = (end - start) / (INTEGRATE_ACC);
+      int size = INTEGRATE_ACC;
+      if (dx < INTEGRATE_DX) {
+        dx = INTEGRATE_DX;
+        size = (end - start) / dx;
+      }
+
+      if (size < 0) {
+        std::cerr << "\nNegative size\n";
+        return 0;
+      }
+
+      std::vector<float> x(size);
+      std::vector<float>::iterator x_it;
+      float val;
+      for (x_it = x.begin(), val = start; x_it != x.end(); ++x_it, val += dx)
+        *x_it = val;
+
+      // calculate both parts of exponential
+      float exp1;
+      std::vector<float> exp2(size);
+      std::vector<float>::iterator exp2_it;
+      float C = -0.5f * pow(FB / sigma, 2.0f);
+      for (x_it = x.begin(), exp2_it = exp2.begin(); x_it != x.end(); ++x_it, ++exp2_it)
+      {
+        exp1 = C * pow(1.0f / *x_it - 1.0f / Z - mu / FB, 2.0f);
+        *exp2_it = -ALPHA * (*x_it) + exp1;
+      }
+
+      return logsumexp(exp2, F_B_SQRT_2_PI * dx);
+    }
 
     //-- change detection on occupancy:
     /// track or ignore changes while inserting scans (default: ignore)
@@ -491,7 +601,7 @@ namespace octomap {
      * Traces a ray from origin to end and updates all voxels on the
      *  way as free.  The volume containing "end" is not updated.
      */
-    inline bool integrateMissOnRay(const point3d& origin, const point3d& end, bool lazy_eval = false);
+    inline bool integrateMissOnRay(const point3d& origin, const point3d& end, bool lazy_eval = false, float r = 0.0f, float Z = 0.0f);
 
 
     // recursive calls ----------------------------
@@ -517,8 +627,6 @@ namespace octomap {
     bool use_change_detection;
     /// Set of leaf keys (lowest level) which changed since last resetChangeDetection
     KeyBoolMap changed_keys;
-    
-
   };
 
 } // namespace

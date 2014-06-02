@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
 
   if (tree1->getNumLeafNodes() != tree2->getNumLeafNodes()){
       OCTOMAP_ERROR_STR("Octrees have different size: " << tree1->getNumLeafNodes() << "!=" <<tree2->getNumLeafNodes() << endl);
-      exit(-1);
+//      exit(-1);
   }
 
   cout << "Expanded num. leafs: " << tree1->getNumLeafNodes() << endl;
@@ -98,7 +98,7 @@ int main(int argc, char** argv) {
       || (fabs(z1-z2) > 1e-6))
   {
     OCTOMAP_WARNING("Trees span over different volumes, results may be wrong\n");
-    exit(1);
+//    exit(1);
   }
 
   double kld_sum = 0.0;
@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
   {
     OcTreeNode* n = tree2->search(it.getKey());
     if (!n){
-      OCTOMAP_ERROR("Could not find coordinate of 1st octree in 2nd octree\n");
+//      OCTOMAP_ERROR("Could not find coordinate of 1st octree in 2nd octree\n");
     } else{
       // check occupancy prob:
       double p1 = it->getOccupancy();

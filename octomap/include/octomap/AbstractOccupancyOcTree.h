@@ -40,7 +40,8 @@
 #include "OcTreeKey.h"
 #include <cassert>
 #include <fstream>
-
+#include <stdlib.h>
+using namespace std;
 
 namespace octomap {
 
@@ -120,6 +121,16 @@ namespace octomap {
       return (occupancyNode.getLogOdds() >= this->occ_prob_thres_log);
     }
 
+    /// queries whether a node is empty according to the tree's parameter for "occupancy"
+    inline bool isNodeEmpty(const OcTreeNode* occupancyNode) const{
+      return (occupancyNode->getLogOdds() <= this->emp_prob_thres_log);
+    }
+
+    /// queries whether a node is empty according to the tree's parameter for "occupancy"
+    inline bool isNodeEmpty(const OcTreeNode& occupancyNode) const{
+      return (occupancyNode.getLogOdds() <= this->emp_prob_thres_log);
+    }
+
     /// queries whether a node is at the clamping threshold according to the tree's parameter
     inline bool isNodeAtThreshold(const OcTreeNode* occupancyNode) const{
       return (occupancyNode->getLogOdds() >= this->clamping_thres_max
@@ -166,7 +177,8 @@ namespace octomap {
      *   This speeds up the insertion, but you need to call updateInnerOccupancy() when done.
      * @return pointer to the updated NODE
      */
-    virtual OcTreeNode* updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval = false) = 0;
+    // virtual OcTreeNode* updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval = false) = 0;
+    virtual OcTreeNode* updateNode(const OcTreeKey& key, bool occupied, bool lazy_eval = false, point3d origin = point3d(), point3d end = point3d(), float Z = 0, int sensor_model = 0, float sigma = 1.0f, float mu = 0.0f) = 0;
 
     /**
      * Integrate occupancy measurement.
@@ -178,7 +190,7 @@ namespace octomap {
      *   This speeds up the insertion, but you need to call updateInnerOccupancy() when done.
      * @return pointer to the updated NODE
      */
-    virtual OcTreeNode* updateNode(const point3d& value, bool occupied, bool lazy_eval = false) = 0;
+    virtual OcTreeNode* updateNode(const point3d& value, bool occupied, bool lazy_eval = false, point3d origin = point3d(), point3d end = point3d(), float Z = 0, int sensor_model = 0, float sigma = 1.0f, float mu = 0.0f) = 0;
 
     virtual void toMaxLikelihood() = 0;
 
@@ -186,6 +198,8 @@ namespace octomap {
 
     /// sets the threshold for occupancy (sensor model)
     void setOccupancyThres(double prob){occ_prob_thres_log = logodds(prob); }
+    /// sets the threshold for empty (sensor model)
+    void setEmptyThres(double prob){emp_prob_thres_log = logodds(prob); }
     /// sets the probability for a "hit" (will be converted to logodds) - sensor model
     void setProbHit(double prob){prob_hit_log = logodds(prob); assert(prob_hit_log >= 0.0);}
     /// sets the probability for a "miss" (will be converted to logodds) - sensor model
@@ -231,6 +245,7 @@ namespace octomap {
     float prob_hit_log;
     float prob_miss_log;
     float occ_prob_thres_log;
+    float emp_prob_thres_log;
 
     static const std::string binaryFileHeader;
   };

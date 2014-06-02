@@ -72,6 +72,14 @@ namespace octomap {
   class OcTreeBaseImpl : public INTERFACE {
 
   public:
+   /**
+    * Find intersection points of given line segment with this node.
+    * @param origin of ray
+    * @param destination of ray
+    * @return pointer to array of two point3d objects (entrance & exit)
+    */
+    virtual point3d* findIntersects(const point3d& origin, const point3d& dest);
+
     /// Make the templated NODE type available from the outside
     typedef NODE NodeType;
 

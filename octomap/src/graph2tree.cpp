@@ -61,7 +61,11 @@ void printUsage(char* self){
             "  -simple (simple scan insertion ray by ray instead of optimized) \n"
             "  -discretize (approximate raycasting on discretized coordinates, speeds up insertion) \n"
             "  -clamping <p_min> <p_max> (override default sensor model clamping probabilities between 0..1)\n"
-            "  -sensor <p_miss> <p_hit> (override default sensor model hit and miss probabilities between 0..1)"
+            "  -sensor <p_miss> <p_hit> (override default sensor model hit and miss probabilities between 0..1)\n"
+            "  -model <model_id> (use sensor model ideal, ISM or PRISM, default ideal)\n"
+            "  -sigma <sigma> (noise in pixel for PRISM or meter for ISM)\n"
+            "  -mu <mu> (offset in noise for PRISM)"
+
   "\n";
 
 
@@ -112,6 +116,8 @@ int main(int argc, char** argv) {
   bool detailedLog = false;
   bool simpleUpdate = false;
   bool discretize = false;
+  int sensor_model = 0;
+  float sigma = 1.0f, mu = 0;
   unsigned char compression = 1;
 
   // get default sensor model values:
@@ -161,6 +167,15 @@ int main(int argc, char** argv) {
       probMiss = atof(argv[++arg]);
       probHit = atof(argv[++arg]);
     }
+    else if (! strcmp(argv[arg], "-model")){
+      sensor_model = atoi(argv[++arg]);
+    }
+    else if (! strcmp(argv[arg], "-sigma")){
+      sigma = atof(argv[++arg]);
+    }
+    else if (! strcmp(argv[arg], "-mu")){
+      mu = atof(argv[++arg]);
+    }
     else {
       printUsage(argv[0]);
     }
@@ -184,7 +199,6 @@ int main(int argc, char** argv) {
     OCTOMAP_ERROR("Error in sensor model (hit/miss prob.):  0.0 <= [%f] < [%f] <= 1.0\n", probMiss, probHit);
     exit(1);
   }
-
 
   std::string treeFilenameOT = treeFilename + ".ot";
   std::string treeFilenameMLOT = treeFilename + "_ml.ot";
@@ -244,7 +258,9 @@ int main(int argc, char** argv) {
     else cout << "("<<currentScan << "/" << numScans << ") " << flush;
 
     if (simpleUpdate)
-      tree->insertPointCloudRays((*scan_it)->scan, (*scan_it)->pose.trans(), maxrange);
+    {
+      tree->insertPointCloudRays((*scan_it)->scan, (*scan_it)->pose.trans(), sensor_model, sigma, mu, maxrange);
+    }
     else
       tree->insertPointCloud((*scan_it)->scan, (*scan_it)->pose.trans(), maxrange, false, discretize);
 
